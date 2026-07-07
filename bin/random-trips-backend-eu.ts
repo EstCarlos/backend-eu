@@ -1,20 +1,30 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib/core';
-import { RandomTripsBackendEuStack } from '../lib/random-trips-backend-eu-stack';
+import { getEnvironmentConfig } from '../lib/config/environments';
+import { DataStack } from '../lib/stacks/data-stack';
+import { MediaStack } from '../lib/stacks/media-stack';
+import { ApiStack } from '../lib/stacks/api-stack';
+import { DnsStack } from '../lib/stacks/dns-stack';
 
 const app = new cdk.App();
-new RandomTripsBackendEuStack(app, 'RandomTripsBackendEuStack', {
-  /* If you don't specify 'env', this stack will be environment-agnostic.
-   * Account/Region-dependent features and context lookups will not work,
-   * but a single synthesized template can be deployed anywhere. */
 
-  /* Uncomment the next line to specialize this stack for the AWS Account
-   * and Region that are implied by the current CLI configuration. */
-  // env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION },
+// `cdk deploy -c env=prod` para producción; sin flag despliega a la cuenta dev.
+const config = getEnvironmentConfig(app.node.tryGetContext('env') ?? 'dev');
 
-  /* Uncomment the next line if you know exactly what Account and Region you
-   * want to deploy the stack to. */
-  // env: { account: '123456789012', region: 'us-east-1' },
+const data = new DataStack(app, 'RandomTrips-Data', { env: config.env, config });
+const media = new MediaStack(app, 'RandomTrips-Media', { env: config.env, config });
 
-  /* For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html */
+new ApiStack(app, 'RandomTrips-Api', {
+  env: config.env,
+  config,
+  table: data.table,
+  mediaBucket: media.bucket,
+  cdnDomainName: media.distribution.distributionDomainName,
 });
+
+if (config.domainName) {
+  new DnsStack(app, 'RandomTrips-Dns', { env: config.env, config });
+}
+
+cdk.Tags.of(app).add('project', 'random-trips');
+cdk.Tags.of(app).add('environment', config.name);
