@@ -127,6 +127,17 @@ export class OrderAlreadyCapturedError extends Error {
   }
 }
 
+/**
+ * Lanzado cuando el banco/procesador rechaza la tarjeta (INSTRUMENT_DECLINED).
+ * No es un error del sistema: el cliente debe reintentar con otro método
+ * (el frontend reinicia el checkout con actions.restart()).
+ */
+export class InstrumentDeclinedError extends Error {
+  constructor(public readonly orderId: string) {
+    super(`El método de pago de la orden ${orderId} fue rechazado`);
+  }
+}
+
 export async function captureOrder(orderId: string): Promise<CaptureResult> {
   const accessToken = await getAccessToken();
 
@@ -143,6 +154,10 @@ export async function captureOrder(orderId: string): Promise<CaptureResult> {
 
     if (response.status === 422 && body.includes('ORDER_ALREADY_CAPTURED')) {
       throw new OrderAlreadyCapturedError(orderId);
+    }
+
+    if (response.status === 422 && body.includes('INSTRUMENT_DECLINED')) {
+      throw new InstrumentDeclinedError(orderId);
     }
 
     throw new Error(`Error capturando la orden de PayPal (${response.status}): ${body}`);

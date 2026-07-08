@@ -5,7 +5,11 @@ import { TransactionCanceledException } from '@aws-sdk/client-dynamodb';
 import { ddb, TABLE_NAME } from '../shared/ddb';
 import { EMAIL_REGEX, isNonEmptyString, json, parseBody, validarViajeros } from '../shared/http';
 import { calcularPagoInicial, calcularTotal, getPlanById } from '../shared/planes';
-import { captureOrder, OrderAlreadyCapturedError } from '../shared/paypal';
+import {
+  captureOrder,
+  InstrumentDeclinedError,
+  OrderAlreadyCapturedError,
+} from '../shared/paypal';
 import { notificarEquipo } from '../shared/ses';
 import { Reserva } from '../shared/types';
 
@@ -67,6 +71,15 @@ export async function handler(
       if (existente) {
         return json(200, { ok: true, reservaId: existente });
       }
+    }
+
+    if (error instanceof InstrumentDeclinedError) {
+      // Rechazo del banco, no error del sistema: el frontend reinicia el
+      // checkout (actions.restart()) para que el cliente use otro método.
+      return json(402, {
+        error: 'La tarjeta fue rechazada por el banco. Intenta con otra tarjeta u otro método de pago.',
+        code: 'INSTRUMENT_DECLINED',
+      });
     }
 
     console.error('Error capturando la orden de PayPal:', error);
