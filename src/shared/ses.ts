@@ -1,6 +1,9 @@
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 
 const NOTIFICATION_EMAIL = process.env.NOTIFICATION_EMAIL ?? '';
+// Remitente sobre el dominio verificado en SES (notifications@randomtrips.co);
+// el destinatario (NOTIFICATION_EMAIL) es el buzón real del equipo.
+const SES_FROM = process.env.SES_FROM || NOTIFICATION_EMAIL;
 
 const ses = new SESv2Client({});
 
@@ -17,7 +20,7 @@ export async function notificarEquipo(asunto: string, texto: string): Promise<vo
   try {
     await ses.send(
       new SendEmailCommand({
-        FromEmailAddress: NOTIFICATION_EMAIL,
+        FromEmailAddress: SES_FROM,
         Destination: { ToAddresses: [NOTIFICATION_EMAIL] },
         Content: {
           Simple: {

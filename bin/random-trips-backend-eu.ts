@@ -14,17 +14,18 @@ const config = getEnvironmentConfig(app.node.tryGetContext('env') ?? 'dev');
 const data = new DataStack(app, 'RandomTrips-Data', { env: config.env, config });
 const media = new MediaStack(app, 'RandomTrips-Media', { env: config.env, config });
 
+const dns = config.domainName
+  ? new DnsStack(app, 'RandomTrips-Dns', { env: config.env, config })
+  : undefined;
+
 new ApiStack(app, 'RandomTrips-Api', {
   env: config.env,
   config,
   table: data.table,
   mediaBucket: media.bucket,
   cdnDomainName: media.distribution.distributionDomainName,
+  hostedZone: dns?.hostedZone,
 });
-
-if (config.domainName) {
-  new DnsStack(app, 'RandomTrips-Dns', { env: config.env, config });
-}
 
 cdk.Tags.of(app).add('project', 'random-trips');
 cdk.Tags.of(app).add('environment', config.name);

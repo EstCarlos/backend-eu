@@ -9,3 +9,4 @@ cdk.out
 
 # Entornos (cuentas AWS, email) — nunca commitear
 .env
+update_vars_ecommerce.sh

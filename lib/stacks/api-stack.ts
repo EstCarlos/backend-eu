@@ -1,11 +1,15 @@
 import * as path from 'node:path';
 import * as cdk from 'aws-cdk-lib/core';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as route53 from 'aws-cdk-lib/aws-route53';
+import * as targets from 'aws-cdk-lib/aws-route53-targets';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as ses from 'aws-cdk-lib/aws-ses';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
@@ -17,6 +21,8 @@ export interface ApiStackProps extends cdk.StackProps {
   table: dynamodb.ITable;
   mediaBucket: s3.IBucket;
   cdnDomainName: string;
+  /** Zona del entorno (DnsStack); requerida solo con enableCustomDomains. */
+  hostedZone?: route53.IHostedZone;
 }
 
 /**
@@ -36,7 +42,7 @@ export class ApiStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
 
-    const { config, table, mediaBucket, cdnDomainName } = props;
+    const { config, table, mediaBucket, cdnDomainName, hostedZone } = props;
 
     // Los valores de estos parámetros se crean a mano (SecureString, ver README);
     // aquí solo se referencian para dar permiso de lectura a las Lambdas PayPal.
@@ -54,11 +60,25 @@ export class ApiStack extends cdk.Stack {
       { parameterName: paypalClientSecretParam }
     );
 
-    // La identidad manda un email de verificación al desplegar; hasta hacer
-    // click en ese link, SES rechaza los envíos (los handlers lo toleran).
+    // Identidad del BUZÓN destinatario (manda email de verificación al
+    // desplegar — click obligatorio): necesaria mientras la cuenta esté en
+    // sandbox de SES, donde el destinatario también debe estar verificado.
     const emailIdentity = new ses.EmailIdentity(this, 'NotificationEmail', {
       identity: ses.Identity.email(config.notificationEmail),
     });
+
+    // El REMITENTE es la identidad de dominio (notifications@<dominio raíz>),
+    // creada por CLI fuera de CDK con sus DKIM en la zona de prod: dar permiso
+    // de envío sobre ella a las Lambdas que notifican.
+    const sesFromDomain = config.sesFromEmail?.split('@')[1];
+    const enviarComoDominio = sesFromDomain
+      ? new iam.PolicyStatement({
+          actions: ['ses:SendEmail'],
+          resources: [
+            `arn:aws:ses:${this.region}:${this.account}:identity/${sesFromDomain}`,
+          ],
+        })
+      : undefined;
 
     const makeFunction = (
       name: string,
@@ -94,10 +114,14 @@ export class ApiStack extends cdk.Stack {
       environment: {
         TABLE_NAME: table.tableName,
         NOTIFICATION_EMAIL: config.notificationEmail,
+        ...(config.sesFromEmail ? { SES_FROM: config.sesFromEmail } : {}),
       },
     });
     table.grantWriteData(contactoFn);
     emailIdentity.grantSendEmail(contactoFn);
+    if (enviarComoDominio) {
+      contactoFn.addToRolePolicy(enviarComoDominio);
+    }
 
     const createOrderFn = makeFunction('CreateOrderFn', 'paypal-create-order', {
       timeout: cdk.Duration.seconds(15),
@@ -115,6 +139,7 @@ export class ApiStack extends cdk.Stack {
       environment: {
         TABLE_NAME: table.tableName,
         NOTIFICATION_EMAIL: config.notificationEmail,
+        ...(config.sesFromEmail ? { SES_FROM: config.sesFromEmail } : {}),
         PAYPAL_API_BASE: config.paypalApiBase,
         PAYPAL_CLIENT_ID_PARAM: paypalClientIdParam,
         PAYPAL_CLIENT_SECRET_PARAM: paypalClientSecretParam,
@@ -124,6 +149,9 @@ export class ApiStack extends cdk.Stack {
     paypalClientId.grantRead(captureOrderFn);
     paypalClientSecret.grantRead(captureOrderFn);
     emailIdentity.grantSendEmail(captureOrderFn);
+    if (enviarComoDominio) {
+      captureOrderFn.addToRolePolicy(enviarComoDominio);
+    }
 
     const galeriaFn = makeFunction('GaleriaFn', 'galeria', {
       environment: {
@@ -171,6 +199,45 @@ export class ApiStack extends cdk.Stack {
       throttlingRateLimit: 10,
       throttlingBurstLimit: 20,
     };
+
+    // Custom domain api.<dominio>: solo cuando la delegación DNS de la zona ya
+    // resuelve públicamente — la validación del certificado ACM es por DNS y
+    // se quedaría colgada (hasta timeout del deploy) con una zona sin delegar.
+    if (config.enableCustomDomains) {
+      if (!hostedZone || !config.domainName) {
+        throw new Error('enableCustomDomains requiere DnsStack (domainName) desplegado');
+      }
+
+      const apiDomainName = `api.${config.domainName}`;
+
+      const certificate = new acm.Certificate(this, 'ApiCertificate', {
+        domainName: apiDomainName,
+        validation: acm.CertificateValidation.fromDns(hostedZone),
+      });
+
+      const apiDomain = new apigwv2.DomainName(this, 'ApiDomain', {
+        domainName: apiDomainName,
+        certificate,
+      });
+
+      new apigwv2.ApiMapping(this, 'ApiMapping', {
+        api: this.httpApi,
+        domainName: apiDomain,
+      });
+
+      new route53.ARecord(this, 'ApiAliasRecord', {
+        zone: hostedZone,
+        recordName: 'api',
+        target: route53.RecordTarget.fromAlias(
+          new targets.ApiGatewayv2DomainProperties(
+            apiDomain.regionalDomainName,
+            apiDomain.regionalHostedZoneId
+          )
+        ),
+      });
+
+      new cdk.CfnOutput(this, 'ApiCustomDomain', { value: `https://${apiDomainName}` });
+    }
 
     new cdk.CfnOutput(this, 'ApiUrl', { value: this.httpApi.apiEndpoint });
   }

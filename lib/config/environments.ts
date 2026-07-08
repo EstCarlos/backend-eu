@@ -19,13 +19,28 @@ export type EnvironmentConfig = {
   env: cdk.Environment;
   /** Orígenes permitidos en CORS del API (frontend local + deploy). */
   allowedOrigins: string[];
-  /** Email verificado en SES que recibe avisos de reservas y mensajes. */
+  /** Buzón real del equipo que recibe avisos de reservas y mensajes. */
   notificationEmail: string;
+  /**
+   * Remitente de los avisos, sobre el dominio raíz verificado en SES
+   * (notifications@randomtrips.co). La identidad de dominio se creó por CLI
+   * en ambas cuentas; sus registros DKIM viven en la zona Route 53 de prod.
+   */
+  sesFromEmail?: string;
   /** Base URL del API de PayPal: Sandbox en dev, Live en prod. */
   paypalApiBase: string;
-  /** Dominio raíz (ej. randomtrips.com). Si está definido se crea la Hosted Zone. */
+  /**
+   * Dominio de la zona de este entorno: la raíz (randomtrips.co) vive en la
+   * cuenta prod; dev usa la subzona dev.randomtrips.co delegada desde prod.
+   */
   domainName?: string;
-  /** Activar api.<dominio> / cdn.<dominio>. Solo cuando la delegación NS esté verificada. */
+  /**
+   * Subzonas delegadas desde esta zona (solo prod): registros NS que apuntan
+   * a los name servers de la zona del otro entorno. Los NS de la zona dev se
+   * pegan en DEV_ZONE_NS (.env, separados por coma) tras desplegar su DnsStack.
+   */
+  delegations?: Array<{ subdomain: string; nameServers: string[] }>;
+  /** Activar api.<dominio>. Solo cuando la delegación NS esté verificada. */
   enableCustomDomains: boolean;
   /** true = los datos (DynamoDB, S3) sobreviven a un cdk destroy. Siempre true en prod. */
   retainData: boolean;
@@ -50,11 +65,20 @@ export function getEnvironmentConfig(name: string): EnvironmentConfig {
           account: requiredEnv('DEV_ACCOUNT'),
           region: 'us-east-1',
         },
-        allowedOrigins: ['http://localhost:3000'],
+        allowedOrigins: [
+          'http://localhost:3000',
+          // Deploy del branch develop del frontend en Amplify
+          'https://develop.d18bm59xzbcrzh.amplifyapp.com',
+        ],
         notificationEmail: requiredEnv('NOTIFICATION_EMAIL'),
+        sesFromEmail: process.env.DOMAIN_NAME
+          ? `notifications@${process.env.DOMAIN_NAME}`
+          : undefined,
         paypalApiBase: 'https://api-m.sandbox.paypal.com',
-        domainName: process.env.DOMAIN_NAME || undefined,
-        enableCustomDomains: false,
+        domainName: process.env.DOMAIN_NAME
+          ? `dev.${process.env.DOMAIN_NAME}`
+          : undefined,
+        enableCustomDomains: true,
         retainData: false,
       };
     case 'prod':
@@ -66,9 +90,20 @@ export function getEnvironmentConfig(name: string): EnvironmentConfig {
         },
         allowedOrigins: [], // TODO: dominio real del frontend en producción
         notificationEmail: requiredEnv('NOTIFICATION_EMAIL'),
+        sesFromEmail: process.env.DOMAIN_NAME
+          ? `notifications@${process.env.DOMAIN_NAME}`
+          : undefined,
         paypalApiBase: 'https://api-m.paypal.com',
         domainName: process.env.DOMAIN_NAME || undefined,
-        enableCustomDomains: false,
+        delegations: process.env.DEV_ZONE_NS
+          ? [
+              {
+                subdomain: 'dev',
+                nameServers: process.env.DEV_ZONE_NS.split(',').map((ns) => ns.trim()),
+              },
+            ]
+          : [],
+        enableCustomDomains: true,
         retainData: true,
       };
     default:

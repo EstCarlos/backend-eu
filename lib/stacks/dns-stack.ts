@@ -8,13 +8,18 @@ export interface DnsStackProps extends cdk.StackProps {
 }
 
 /**
- * Hosted Zone de Route 53 para el dominio comprado fuera de AWS.
- * Solo se instancia si config.domainName está definido (DOMAIN_NAME en .env).
+ * Hosted Zone de Route 53 del entorno.
  *
- * Tras el deploy, copiar los 4 name servers del output NameServers en el
- * registrar externo. Cuando la delegación esté verificada (dig NS <dominio>),
- * activar config.enableCustomDomains para api.<dominio> / cdn.<dominio>
- * (certificados ACM + custom domains — TODO, ver README).
+ * Arquitectura multi-cuenta:
+ *   - prod: zona raíz (randomtrips.co). Sus 4 name servers van en el registrar
+ *     externo (Namecheap). Además delega subzonas con registros NS
+ *     (config.delegations, ej. dev → NS de la zona dev).
+ *   - dev: subzona dev.randomtrips.co. Sus NS se pegan en DEV_ZONE_NS (.env)
+ *     y se redespliega el DnsStack de prod para crear la delegación.
+ *
+ * Cuando la cadena resuelva públicamente (dig NS <zona>), activar
+ * config.enableCustomDomains para api.<dominio> (certificado ACM + custom
+ * domain del API Gateway, ver ApiStack).
  */
 export class DnsStack extends cdk.Stack {
   public readonly hostedZone: route53.PublicHostedZone;
@@ -33,9 +38,18 @@ export class DnsStack extends cdk.Stack {
       comment: 'Random Trips',
     });
 
+    for (const delegation of config.delegations ?? []) {
+      new route53.NsRecord(this, `Delegacion-${delegation.subdomain}`, {
+        zone: this.hostedZone,
+        recordName: delegation.subdomain,
+        values: delegation.nameServers,
+        ttl: cdk.Duration.hours(1),
+      });
+    }
+
     new cdk.CfnOutput(this, 'NameServers', {
       value: cdk.Fn.join(', ', this.hostedZone.hostedZoneNameServers ?? []),
-      description: 'Configurar estos NS en el registrar del dominio',
+      description: 'NS de esta zona: al registrar externo (prod) o a DEV_ZONE_NS de prod (dev)',
     });
   }
 }
