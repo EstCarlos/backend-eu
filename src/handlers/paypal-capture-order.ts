@@ -4,7 +4,7 @@ import { GetCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { TransactionCanceledException } from '@aws-sdk/client-dynamodb';
 import { ddb, TABLE_NAME } from '../shared/ddb';
 import { EMAIL_REGEX, isNonEmptyString, json, parseBody, validarViajeros } from '../shared/http';
-import { calcularTotal, getPlanById } from '../shared/planes';
+import { calcularPagoInicial, calcularTotal, getPlanById } from '../shared/planes';
 import { captureOrder, OrderAlreadyCapturedError } from '../shared/paypal';
 import { notificarEquipo } from '../shared/ses';
 import { Reserva } from '../shared/types';
@@ -73,12 +73,17 @@ export async function handler(
     return json(502, { error: 'No se pudo confirmar el pago' });
   }
 
+  const montoTotal = calcularTotal(plan.id, viajeros.length);
+  const montoPagado = calcularPagoInicial(plan.id, viajeros.length);
+
   const reserva: Reserva = {
     id: randomUUID(),
     fecha: new Date().toISOString(),
     planId: plan.id,
     planNombre: plan.nombre,
-    montoTotal: calcularTotal(plan.id, viajeros.length),
+    montoTotal,
+    montoPagado,
+    saldoPendiente: montoTotal - montoPagado,
     paypalOrderId,
     contacto: { nombreCompleto, email, telefono },
     viajeros,
@@ -139,7 +144,9 @@ export async function handler(
     [
       `Reserva: ${reserva.id}`,
       `Plan: ${reserva.planNombre} (${reserva.planId})`,
-      `Total: $${reserva.montoTotal.toFixed(2)} USD`,
+      `Pagado hoy: EUR ${reserva.montoPagado.toFixed(2)}`,
+      `Total del viaje: EUR ${reserva.montoTotal.toFixed(2)}`,
+      `Saldo pendiente (cobrar por links de pago): EUR ${reserva.saldoPendiente.toFixed(2)}`,
       `PayPal Order: ${reserva.paypalOrderId}`,
       `Titular: ${nombreCompleto} — ${email} — ${telefono}`,
       `Viajeros: ${viajeros.join(', ')}`,

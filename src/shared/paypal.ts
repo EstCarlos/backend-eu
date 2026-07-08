@@ -1,5 +1,5 @@
 import { SSMClient, GetParametersCommand } from '@aws-sdk/client-ssm';
-import { calcularTotal, getPlanById } from './planes';
+import { calcularPagoInicial, getPlanById } from './planes';
 
 /**
  * Cliente PayPal Orders v2 (OAuth client_credentials → create → capture).
@@ -73,8 +73,14 @@ export async function createOrder(
     throw new Error(`Plan desconocido: ${planId}`);
   }
 
-  const total = calcularTotal(planId, cantidadViajeros);
+  // En planes con cuotas solo se cobra el depósito de reserva; el saldo
+  // se cobra después con links de pago (una cuota mensual por link).
+  const pagoInicial = calcularPagoInicial(planId, cantidadViajeros);
   const accessToken = await getAccessToken();
+
+  const concepto = plan.reserva
+    ? `Random Trips — Reserva ${plan.nombre} x ${cantidadViajeros} viajero(s)`
+    : `Random Trips — ${plan.nombre} x ${cantidadViajeros} viajero(s)`;
 
   const response = await fetch(`${PAYPAL_API_BASE}/v2/checkout/orders`, {
     method: 'POST',
@@ -86,10 +92,10 @@ export async function createOrder(
       intent: 'CAPTURE',
       purchase_units: [
         {
-          description: `Random Trips — ${plan.nombre} x ${cantidadViajeros} viajero(s)`,
+          description: concepto,
           amount: {
-            currency_code: 'USD',
-            value: total.toFixed(2),
+            currency_code: 'EUR',
+            value: pagoInicial.toFixed(2),
           },
         },
       ],
