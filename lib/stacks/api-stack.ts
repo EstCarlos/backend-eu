@@ -3,6 +3,8 @@ import * as cdk from 'aws-cdk-lib/core';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import { HttpUserPoolAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
@@ -21,6 +23,9 @@ export interface ApiStackProps extends cdk.StackProps {
   table: dynamodb.ITable;
   mediaBucket: s3.IBucket;
   cdnDomainName: string;
+  /** User Pool del panel admin (AuthStack); protege las rutas /admin/*. */
+  userPool: cognito.IUserPool;
+  userPoolClient: cognito.IUserPoolClient;
   /** Zona del entorno (DnsStack); requerida solo con enableCustomDomains. */
   hostedZone?: route53.IHostedZone;
 }
@@ -30,11 +35,13 @@ export interface ApiStackProps extends cdk.StackProps {
  * sin tocar datos (DataStack/MediaStack).
  *
  * Rutas (mismo contrato que las API routes de random-trips-web):
- *   POST /contacto
- *   POST /paypal/create-order
- *   POST /paypal/capture-order
- *   GET  /galeria
- *   GET  /planes
+ *   POST  /contacto
+ *   POST  /paypal/create-order
+ *   POST  /paypal/capture-order
+ *   GET   /galeria
+ *   GET   /planes
+ *   GET   /admin/reservas         (JWT Cognito — panel admin)
+ *   PATCH /admin/reservas/{id}    (JWT Cognito — panel admin)
  */
 export class ApiStack extends cdk.Stack {
   public readonly httpApi: apigwv2.HttpApi;
@@ -42,7 +49,8 @@ export class ApiStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
 
-    const { config, table, mediaBucket, cdnDomainName, hostedZone } = props;
+    const { config, table, mediaBucket, cdnDomainName, userPool, userPoolClient, hostedZone } =
+      props;
 
     // Los valores de estos parámetros se crean a mano (SecureString, ver README);
     // aquí solo se referencian para dar permiso de lectura a las Lambdas PayPal.
@@ -163,6 +171,18 @@ export class ApiStack extends cdk.Stack {
 
     const planesFn = makeFunction('PlanesFn', 'planes');
 
+    // Rutas del panel admin: leen/actualizan reservas. Solo lectura+escritura
+    // sobre la tabla; van protegidas por el authorizer de Cognito (más abajo).
+    const adminReservasListFn = makeFunction('AdminReservasListFn', 'admin-reservas-list', {
+      environment: { TABLE_NAME: table.tableName },
+    });
+    table.grantReadData(adminReservasListFn);
+
+    const adminReservaUpdateFn = makeFunction('AdminReservaUpdateFn', 'admin-reserva-update', {
+      environment: { TABLE_NAME: table.tableName },
+    });
+    table.grantReadWriteData(adminReservaUpdateFn);
+
     this.httpApi = new apigwv2.HttpApi(this, 'HttpApi', {
       apiName: 'random-trips',
       corsPreflight: {
@@ -170,11 +190,19 @@ export class ApiStack extends cdk.Stack {
         allowMethods: [
           apigwv2.CorsHttpMethod.GET,
           apigwv2.CorsHttpMethod.POST,
+          apigwv2.CorsHttpMethod.PATCH,
           apigwv2.CorsHttpMethod.OPTIONS,
         ],
-        allowHeaders: ['content-type'],
+        allowHeaders: ['content-type', 'authorization'],
         maxAge: cdk.Duration.hours(1),
       },
+    });
+
+    // Authorizer JWT de Cognito para las rutas /admin/*. El construct específico
+    // de User Pool valida iss/aud contra el App Client sin código propio y
+    // expone las claims (email del staff) al handler.
+    const adminAuthorizer = new HttpUserPoolAuthorizer('AdminAuthorizer', userPool, {
+      userPoolClients: [userPoolClient],
     });
 
     const routes: Array<[apigwv2.HttpMethod, string, NodejsFunction]> = [
@@ -190,6 +218,20 @@ export class ApiStack extends cdk.Stack {
         path: routePath,
         methods: [method],
         integration: new HttpLambdaIntegration(`${fn.node.id}Integration`, fn),
+      });
+    }
+
+    const adminRoutes: Array<[apigwv2.HttpMethod, string, NodejsFunction]> = [
+      [apigwv2.HttpMethod.GET, '/admin/reservas', adminReservasListFn],
+      [apigwv2.HttpMethod.PATCH, '/admin/reservas/{id}', adminReservaUpdateFn],
+    ];
+
+    for (const [method, routePath, fn] of adminRoutes) {
+      this.httpApi.addRoutes({
+        path: routePath,
+        methods: [method],
+        integration: new HttpLambdaIntegration(`${fn.node.id}Integration`, fn),
+        authorizer: adminAuthorizer,
       });
     }
 
