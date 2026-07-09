@@ -3,6 +3,7 @@ import { Match, Template } from 'aws-cdk-lib/assertions';
 import { EnvironmentConfig } from '../lib/config/environments';
 import { DataStack } from '../lib/stacks/data-stack';
 import { MediaStack } from '../lib/stacks/media-stack';
+import { AuthStack } from '../lib/stacks/auth-stack';
 import { ApiStack } from '../lib/stacks/api-stack';
 import { DnsStack } from '../lib/stacks/dns-stack';
 
@@ -21,14 +22,17 @@ function buildStacks() {
   const app = new cdk.App();
   const data = new DataStack(app, 'TestData', { env: testConfig.env, config: testConfig });
   const media = new MediaStack(app, 'TestMedia', { env: testConfig.env, config: testConfig });
+  const auth = new AuthStack(app, 'TestAuth', { env: testConfig.env, config: testConfig });
   const api = new ApiStack(app, 'TestApi', {
     env: testConfig.env,
     config: testConfig,
     table: data.table,
     mediaBucket: media.bucket,
     cdnDomainName: media.distribution.distributionDomainName,
+    userPool: auth.userPool,
+    userPoolClient: auth.userPoolClient,
   });
-  return { data, media, api };
+  return { data, media, auth, api };
 }
 
 describe('DataStack', () => {
@@ -92,19 +96,34 @@ describe('MediaStack', () => {
 describe('ApiStack', () => {
   const template = Template.fromStack(buildStacks().api);
 
-  test('expone las 5 rutas del contrato', () => {
+  test('expone las rutas públicas y las de admin', () => {
     for (const routeKey of [
       'POST /contacto',
       'POST /paypal/create-order',
       'POST /paypal/capture-order',
       'GET /galeria',
       'GET /planes',
+      'GET /admin/reservas',
+      'PATCH /admin/reservas/{id}',
     ]) {
       template.hasResourceProperties('AWS::ApiGatewayV2::Route', {
         RouteKey: routeKey,
       });
     }
-    template.resourceCountIs('AWS::Lambda::Function', 5);
+    // 5 públicas + 2 admin. El authorizer de Cognito es JWT nativo (sin Lambda).
+    template.resourceCountIs('AWS::Lambda::Function', 7);
+  });
+
+  test('las rutas admin exigen el authorizer JWT de Cognito', () => {
+    template.hasResourceProperties('AWS::ApiGatewayV2::Authorizer', {
+      AuthorizerType: 'JWT',
+    });
+    for (const routeKey of ['GET /admin/reservas', 'PATCH /admin/reservas/{id}']) {
+      template.hasResourceProperties('AWS::ApiGatewayV2::Route', {
+        RouteKey: routeKey,
+        AuthorizationType: 'JWT',
+      });
+    }
   });
 
   test('CORS restringido a los orígenes configurados', () => {

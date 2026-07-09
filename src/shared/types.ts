@@ -30,6 +30,23 @@ export type Contacto = {
   telefono: string;
 };
 
+/**
+ * Estado de seguimiento de la reserva, gestionado a mano por el staff desde el
+ * panel admin. No lo toca el flujo de checkout: una reserva recién pagada nace
+ * como 'nueva'.
+ */
+export type EstadoReserva = 'nueva' | 'contactada' | 'link_enviado' | 'pagada_completa';
+
+/** Pago de una cuota cobrado fuera del checkout (link de pago) y registrado a mano. */
+export type Pago = {
+  fecha: string;
+  /** EUR cobrados en este pago */
+  monto: number;
+  /** Medio usado: 'paypal', 'transferencia', 'efectivo'… (texto libre) */
+  metodo: string;
+  nota?: string;
+};
+
 export type Reserva = {
   id: string;
   fecha: string;
@@ -39,11 +56,20 @@ export type Reserva = {
   montoTotal: number;
   /** Lo efectivamente cobrado en el checkout (EUR): total en pago único, o depósito en planes con cuotas */
   montoPagado: number;
-  /** Saldo pendiente (EUR) que se cobrará por cuotas con links de pago */
+  /** Saldo pendiente (EUR): montoTotal - montoPagado - Σpagos. Se recalcula al registrar pagos. */
   saldoPendiente: number;
   paypalOrderId: string;
   contacto: Contacto;
   viajeros: string[];
+  // --- Seguimiento (panel admin; opcionales para no romper reservas existentes) ---
+  /** Estado de seguimiento. Ausente en reservas viejas → se trata como 'nueva'. */
+  estado?: EstadoReserva;
+  /** Notas internas del staff. */
+  notas?: string;
+  /** Cuotas cobradas a mano tras el checkout. Ausente → []. */
+  pagos?: Pago[];
+  /** Quién y cuándo hizo la última edición desde el panel (auditoría). */
+  ultimaEdicion?: { por: string; fecha: string };
 };
 
 export type Mensaje = {
