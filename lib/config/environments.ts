@@ -67,8 +67,11 @@ export function getEnvironmentConfig(name: string): EnvironmentConfig {
         },
         allowedOrigins: [
           'http://localhost:3000',
+          // Panel admin (Vite) en local
+          'http://localhost:5173',
           // Deploy del branch develop del frontend en Amplify
           'https://develop.d18bm59xzbcrzh.amplifyapp.com',
+          // TODO: URL del panel admin en Amplify (añadir tras el primer deploy)
         ],
         notificationEmail: requiredEnv('NOTIFICATION_EMAIL'),
         sesFromEmail: process.env.DOMAIN_NAME
