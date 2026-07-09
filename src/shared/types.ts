@@ -70,6 +70,11 @@ export type Reserva = {
   pagos?: Pago[];
   /** Quién y cuándo hizo la última edición desde el panel (auditoría). */
   ultimaEdicion?: { por: string; fecha: string };
+  /**
+   * Contador para detección de ediciones concurrentes (optimistic locking del
+   * PATCH admin): cada edición exitosa lo incrementa. Ausente = 0.
+   */
+  version?: number;
 };
 
 export type Mensaje = {

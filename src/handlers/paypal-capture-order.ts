@@ -100,6 +100,11 @@ export async function handler(
     paypalOrderId,
     contacto: { nombreCompleto, email, telefono },
     viajeros,
+    // Seguimiento (panel admin): un pago único nace ya saldado; con cuotas
+    // queda 'nueva' para que el staff le dé seguimiento. Así el estado
+    // guardado no diverge del derivado del saldo.
+    estado: montoTotal - montoPagado <= 0 ? 'pagada_completa' : 'nueva',
+    pagos: [],
   };
 
   try {
