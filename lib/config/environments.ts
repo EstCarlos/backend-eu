@@ -71,7 +71,8 @@ export function getEnvironmentConfig(name: string): EnvironmentConfig {
           'http://localhost:5173',
           // Deploy del branch develop del frontend en Amplify
           'https://develop.d18bm59xzbcrzh.amplifyapp.com',
-          // TODO: URL del panel admin en Amplify (añadir tras el primer deploy)
+          // Deploy del branch develop del panel admin en Amplify
+          'https://develop.d361cjf9hpu2sm.amplifyapp.com',
         ],
         notificationEmail: requiredEnv('NOTIFICATION_EMAIL'),
         sesFromEmail: process.env.DOMAIN_NAME

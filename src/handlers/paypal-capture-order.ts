@@ -10,7 +10,8 @@ import {
   InstrumentDeclinedError,
   OrderAlreadyCapturedError,
 } from '../shared/paypal';
-import { notificarEquipo } from '../shared/ses';
+import { notificarCliente, notificarEquipo } from '../shared/ses';
+import { emailConfirmacionReserva } from '../shared/email-cliente';
 import { Reserva } from '../shared/types';
 
 type CaptureBody = {
@@ -171,6 +172,9 @@ export async function handler(
       `Fecha: ${reserva.fecha}`,
     ].join('\n')
   );
+
+  const confirmacion = emailConfirmacionReserva(reserva);
+  await notificarCliente(email, confirmacion.asunto, confirmacion.texto, confirmacion.html);
 
   return json(200, { ok: true, reservaId: reserva.id });
 }
