@@ -54,7 +54,11 @@ export class AuthStack extends cdk.Stack {
       userPoolClientName: 'random-trips-admin-panel',
       generateSecret: false,
       authFlows: { user: true },
-      preventUserExistenceErrors: true,
+      // false (no el default recomendado por AWS) a propósito: este es un
+      // panel interno de 2-3 personas del staff, no un producto público con
+      // sign-up abierto. El beneficio de decirle de inmediato a alguien que
+      // su correo no está autorizado pesa más que ocultar qué emails existen.
+      preventUserExistenceErrors: false,
       accessTokenValidity: cdk.Duration.hours(1),
       idTokenValidity: cdk.Duration.hours(1),
       refreshTokenValidity: cdk.Duration.days(30),
