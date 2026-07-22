@@ -29,8 +29,8 @@ function escapeHtml(texto: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function eur(monto: number): string {
-  return `EUR ${monto.toFixed(2)}`;
+function usd(monto: number): string {
+  return `US$${monto.toFixed(2)}`;
 }
 
 function filaResumen(etiqueta: string, valor: string, valorColor = COLOR.ink): string {
@@ -54,7 +54,7 @@ export function emailConfirmacionReserva(reserva: Reserva): {
 
   const saldoTexto = pagadoTodo
     ? 'Tu viaje ya está pagado en su totalidad. ¡Nos vemos pronto!'
-    : `Saldo pendiente: ${eur(reserva.saldoPendiente)} (te contactaremos con el link de pago de cada cuota).`;
+    : `Saldo pendiente: ${usd(reserva.saldoPendiente)} (te contactaremos con el link de pago de cada cuota).`;
 
   const texto = [
     `Hola ${nombre},`,
@@ -63,8 +63,8 @@ export function emailConfirmacionReserva(reserva: Reserva): {
     '',
     `Plan: ${reserva.planNombre}`,
     `Viajeros: ${viajeros.join(', ')}`,
-    `Pagado hoy: ${eur(reserva.montoPagado)}`,
-    `Total del viaje: ${eur(reserva.montoTotal)}`,
+    `Pagado hoy: ${usd(reserva.montoPagado)}`,
+    `Total del viaje: ${usd(reserva.montoTotal)}`,
     saldoTexto,
     '',
     `Número de reserva: ${reserva.id}`,
@@ -87,7 +87,7 @@ export function emailConfirmacionReserva(reserva: Reserva): {
       <tr>
         <td style="padding:16px 20px;background-color:${COLOR.crema};border-radius:12px;">
           <p style="margin:0 0 4px;font-family:${FUENTE};font-size:14px;font-weight:bold;color:${COLOR.rojo};">
-            Saldo pendiente: ${eur(reserva.saldoPendiente)}
+            Saldo pendiente: ${usd(reserva.saldoPendiente)}
           </p>
           <p style="margin:0;font-family:${FUENTE};font-size:13px;color:${COLOR.gris};">
             Te contactaremos con el link de pago de cada cuota. No tienes que hacer nada por ahora.
@@ -131,8 +131,8 @@ export function emailConfirmacionReserva(reserva: Reserva): {
                   viajeros.length === 1 ? 'Viajero' : `Viajeros (${viajeros.length})`,
                   escapeHtml(viajeros.join(', '))
                 )}
-                ${filaResumen('Pagado hoy', eur(reserva.montoPagado), COLOR.aqua)}
-                ${filaResumen('Total del viaje', eur(reserva.montoTotal))}
+                ${filaResumen('Pagado hoy', usd(reserva.montoPagado), COLOR.aqua)}
+                ${filaResumen('Total del viaje', usd(reserva.montoTotal))}
               </table>
 
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">

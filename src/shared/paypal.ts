@@ -94,7 +94,7 @@ export async function createOrder(
         {
           description: concepto,
           amount: {
-            currency_code: 'EUR',
+            currency_code: 'USD',
             value: pagoInicial.toFixed(2),
           },
         },

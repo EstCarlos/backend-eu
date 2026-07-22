@@ -7,16 +7,15 @@
 export type Plan = {
   id: string;
   nombre: string;
-  /** Precio total del viaje por persona, en EUR */
+  /** Precio total del viaje por persona, en USD */
   precioPorPersona: number;
-  /** Depósito inicial por persona en EUR — solo en planes con cuotas */
+  /** Depósito inicial por persona en USD — solo en planes con cuotas */
   reserva?: number;
-  /** Saldo restante por persona tras la reserva, en EUR */
+  /** Saldo restante por persona tras la reserva, en USD */
   saldo?: number;
-  /** Cuotas mensuales en EUR que cubren el saldo (se cobran por link de pago) */
+  /** Cuotas en USD que cubren el saldo (se cobran por link de pago) */
   cuotas?: {
-    cantidad: number;
-    monto: number;
+    pagos: Array<{ fecha: string; monto: number }>;
   };
   badge?: string;
   destacado?: boolean;
@@ -40,7 +39,7 @@ export type EstadoReserva = 'nueva' | 'contactada' | 'link_enviado' | 'pagada_co
 /** Pago de una cuota cobrado fuera del checkout (link de pago) y registrado a mano. */
 export type Pago = {
   fecha: string;
-  /** EUR cobrados en este pago */
+  /** USD cobrados en este pago */
   monto: number;
   /** Medio usado: 'paypal', 'transferencia', 'efectivo'… (texto libre) */
   metodo: string;
@@ -52,11 +51,11 @@ export type Reserva = {
   fecha: string;
   planId: string;
   planNombre: string;
-  /** Precio total del viaje (EUR) — lo que el cliente pagará en conjunto */
+  /** Precio total del viaje (USD) — lo que el cliente pagará en conjunto */
   montoTotal: number;
-  /** Lo efectivamente cobrado en el checkout (EUR): total en pago único, o depósito en planes con cuotas */
+  /** Lo efectivamente cobrado en el checkout (USD): total en pago único, o depósito en planes con cuotas */
   montoPagado: number;
-  /** Saldo pendiente (EUR): montoTotal - montoPagado - Σpagos. Se recalcula al registrar pagos. */
+  /** Saldo pendiente (USD): montoTotal - montoPagado - Σpagos. Se recalcula al registrar pagos. */
   saldoPendiente: number;
   paypalOrderId: string;
   contacto: Contacto;

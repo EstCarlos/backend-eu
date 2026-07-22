@@ -27,7 +27,7 @@ const MAX_NOTAS = 2000;
 const MAX_METODO = 100;
 const MAX_NOTA_PAGO = 500;
 
-/** Redondeo a céntimos para evitar arrastre de coma flotante en importes EUR. */
+/** Redondeo a céntimos para evitar arrastre de coma flotante en importes USD. */
 function redondear(n: number): number {
   return Math.round(n * 100) / 100;
 }

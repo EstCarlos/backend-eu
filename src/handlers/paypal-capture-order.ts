@@ -163,9 +163,9 @@ export async function handler(
     [
       `Reserva: ${reserva.id}`,
       `Plan: ${reserva.planNombre} (${reserva.planId})`,
-      `Pagado hoy: EUR ${reserva.montoPagado.toFixed(2)}`,
-      `Total del viaje: EUR ${reserva.montoTotal.toFixed(2)}`,
-      `Saldo pendiente (cobrar por links de pago): EUR ${reserva.saldoPendiente.toFixed(2)}`,
+      `Pagado hoy: US$${reserva.montoPagado.toFixed(2)}`,
+      `Total del viaje: US$${reserva.montoTotal.toFixed(2)}`,
+      `Saldo pendiente (cobrar por links de pago): US$${reserva.saldoPendiente.toFixed(2)}`,
       `PayPal Order: ${reserva.paypalOrderId}`,
       `Titular: ${nombreCompleto} — ${email} — ${telefono}`,
       `Viajeros: ${viajeros.join(', ')}`,
